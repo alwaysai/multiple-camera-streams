@@ -45,7 +45,7 @@ class CameraThread(threading.Thread):
         self._fps = edgeiq.FPS()
 
     def stop(self):
-        print("[INFO] Stopping Camera {} thread...".format(self.idx))
+        print("Stopping Camera {} thread...".format(self.idx))
         self._stop_event.set()
 
     def get_results(self, wait=True):
