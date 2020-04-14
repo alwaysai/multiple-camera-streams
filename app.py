@@ -98,6 +98,10 @@ class CameraThread(threading.Thread):
             self._run_detection()
         finally:
             self._fps.stop()
+            print("Camera {}: elapsed time: {:.2f}".format(
+                self._camera_idx, self._fps.get_elapsed_seconds()))
+            print("Camera {}: approx. FPS: {:.2f}".format(
+                self._camera_idx, self._fps.compute_fps()))
             print("Camera {} Exited".format(self._camera_idx))
 
 
