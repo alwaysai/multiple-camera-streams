@@ -3,6 +3,7 @@ import edgeiq
 import threading
 import collections
 import queue
+import numpy as np
 
 
 class CircularQueue:
@@ -32,7 +33,7 @@ class CameraThread(threading.Thread):
             self, camera_idx, engine, model_id, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._camera_idx = camera_idx
+        self.idx = camera_idx
         self._engine = engine
         self._model_id = model_id
 
@@ -44,7 +45,7 @@ class CameraThread(threading.Thread):
         self._fps = edgeiq.FPS()
 
     def stop(self):
-        print("[INFO] Stopping Camera {} thread...".format(self._camera_idx))
+        print("[INFO] Stopping Camera {} thread...".format(self.idx))
         self._stop_event.set()
 
     def get_results(self, wait=True):
@@ -68,7 +69,7 @@ class CameraThread(threading.Thread):
         print("Accelerator: {}\n".format(obj_detect.accelerator))
         print("Labels:\n{}\n".format(obj_detect.labels))
 
-        with edgeiq.WebcamVideoStream(cam=self._camera_idx) as video_stream:
+        with edgeiq.WebcamVideoStream(cam=self.idx) as video_stream:
             # Allow Webcam to warm up
             time.sleep(2.0)
             self._fps.start()
@@ -85,6 +86,7 @@ class CameraThread(threading.Thread):
                         frame, results.predictions, colors=obj_detect.colors)
 
                 output_results = {
+                        "idx": self.idx,
                         "frame": frame,
                         "results": results,
                         "model_id": obj_detect.model_id
@@ -95,46 +97,58 @@ class CameraThread(threading.Thread):
 
     def run(self):
         try:
+            print("Camera {} starting...".format(self.idx))
             self._run_detection()
         finally:
             self._fps.stop()
             print("Camera {}: elapsed time: {:.2f}".format(
-                self._camera_idx, self._fps.get_elapsed_seconds()))
+                self.idx, self._fps.get_elapsed_seconds()))
             print("Camera {}: approx. FPS: {:.2f}".format(
-                self._camera_idx, self._fps.compute_fps()))
-            print("Camera {} Exited".format(self._camera_idx))
+                self.idx, self._fps.compute_fps()))
+            print("Camera {} Exited".format(self.idx))
 
 
 def main():
 
-    cam0_thread = CameraThread(0, edgeiq.Engine.DNN, "alwaysai/mobilenet_ssd")
-    cam0_thread.start()
+    cameras = []
+    camera_idxs = [0, 2]
+    for i in camera_idxs:
+        cameras.append(CameraThread(i, edgeiq.Engine.DNN, "alwaysai/mobilenet_ssd"))
+
+    for c in cameras:
+        c.start()
 
     try:
         with edgeiq.Streamer() as streamer:
             while True:
-                cam0_results = cam0_thread.get_results()
+                results = []
+                for c in cameras:
+                    results.append(c.get_results())
 
                 # Generate text to display on streamer
-                if cam0_results is not None:
-                    text = ["Camera 0:"]
-                    text.append("Model: {}".format(cam0_results["model_id"]))
-                    text.append("Inference time: {:1.3f} s".format(
-                        cam0_results["results"].duration))
-                    text.append("Objects:")
+                text = []
+                for r in results:
+                    if r is not None:
+                        text.append("Camera {}:".format(r["idx"]))
+                        text.append("Model: {}".format(r["model_id"]))
+                        text.append("Inference time: {:1.3f} s".format(r["results"].duration))
+                        text.append("Objects:")
 
-                    for prediction in cam0_results["results"].predictions:
-                        text.append("{}: {:2.2f}%".format(
-                            prediction.label, prediction.confidence * 100))
+                        for prediction in r["results"].predictions:
+                            text.append("{}: {:2.2f}%".format(
+                                prediction.label, prediction.confidence * 100))
 
-                    streamer.send_data(cam0_results["frame"], text)
+                frame = np.concatenate((results[0]["frame"], results[1]["frame"]), axis=0)
+
+                streamer.send_data(frame, text)
 
                 if streamer.check_exit():
                     break
 
     finally:
-        cam0_thread.stop()
-        cam0_thread.join()
+        for c in cameras:
+            c.stop()
+            c.join()
         print("Program Ending")
 
 
