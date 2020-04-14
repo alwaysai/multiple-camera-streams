@@ -15,7 +15,7 @@ def main():
     fps = edgeiq.FPS()
 
     try:
-        with edgeiq.WebcamVideoStream(cam=0, gstreamer=True) as video_stream, \
+        with edgeiq.WebcamVideoStream(cam=0) as video_stream, \
                 edgeiq.Streamer() as streamer:
             # Allow Webcam to warm up
             time.sleep(2.0)
