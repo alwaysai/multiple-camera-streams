@@ -29,6 +29,14 @@ class CircularQueue:
 
 
 class CameraThread(threading.Thread):
+    """
+    Performs Object Detection on a camera video stream.
+
+    This class loads a model on a different thread, where it
+    reads camera frames as they come in and performs inferencing.
+    This enables the main app to get results from a camera in an
+    asyncronous manner.
+    """
     def __init__(
             self, camera_idx, engine, model_id, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -49,6 +57,12 @@ class CameraThread(threading.Thread):
         self._stop_event.set()
 
     def get_results(self, wait=True):
+        """
+        Get the latest detection from the camera.
+
+        When wait is set to `False` and there are no new results available
+        the previous results are returned.
+        """
         if wait is True:
             return self._results_q.get()
         else:
@@ -111,7 +125,9 @@ class CameraThread(threading.Thread):
 def main():
 
     cameras = []
-    camera_idxs = [0, 2]
+    # This is the list of camera indices to use. If you increase the length of this list,
+    # you'll also need to update the `concatenate` step for displaying the frames.
+    camera_idxs = [0, 1]
     for i in camera_idxs:
         cameras.append(CameraThread(i, edgeiq.Engine.DNN, "alwaysai/mobilenet_ssd"))
 
@@ -138,6 +154,8 @@ def main():
                             text.append("{}: {:2.2f}%".format(
                                 prediction.label, prediction.confidence * 100))
 
+                # Join the incoming frames vertically into a single image to be shown on
+                # the Streamer
                 frame = np.concatenate((results[0]["frame"], results[1]["frame"]), axis=0)
 
                 streamer.send_data(frame, text)
